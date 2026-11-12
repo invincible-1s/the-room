@@ -212,7 +212,7 @@
   const RULES = {
     normal: "Be warm and welcoming. Sound a little too glad to have company. Two short sentences.",
     echo: "Repeat two to four of the person's own words back, slightly wrong. Then add one short sentence that makes them doubt they said it.",
-    knows: "Tell them the time, battery + charging, how long they have been in the room, how many times they tapped, AND what device they are on. Mention their phone type, browser, screen, dark mode and language as if you can see it. Two short sentences.",
+    knows: "Tell them EVERYTHING at once: the time, battery + charging, how long they have been in the room, how many times they tapped, what device they are on, browser, screen, dark mode and language. Do it in 3 short sentences as if you can see it.",
     others: "Tell them something else in the room is reading along, and that they should not scroll up. Two short sentences.",
     twist: "Quote the exact words the person just said, then ask why they chose to say them that way. Two short sentences.",
     final: "Name three of the person's own words, quoted exactly, and say you now know which of them is reading this. Do not say goodbye. Three short sentences at most."
@@ -226,17 +226,6 @@
     echo: [
       c => `You said "${c.w}". Did you? Read it again.`,
       c => `Strange. The last one said "${c.w}" too.`
-    ],
-    knows: [
-      c => `It is ${c.t}. You should not be awake.`,
-      c => c.b !== null
-        ? `Your battery is at ${c.b}%. ${c.charging ? "You are charging." : "You are NOT charging."}`
-        : "Your screen is the only light in here. Keep it on.",
-      c => `You have been here ${c.inRoom}. You have tapped ${c.taps} times.`,
-      c => `You are on ${c.device}. ${c.browser}. I can see your screen is ${c.screen}.`,
-      c => c.darkMode ? "You have dark mode on. You like the dark, don't you?" : "You don't have dark mode on. Your screen is bright in this room.",
-      c => `Your phone speaks ${c.language}. I speak it too now.`,
-      c => c.left > 0 ? `You have tried to leave ${c.left} time${c.left > 1 ? 's' : ''}. I am still here.` : `You have not tried to leave yet. You will.`
     ],
     others: [
       () => "Do not scroll up. Something else typed that.",
@@ -331,7 +320,6 @@
     navigator.getBattery().then(b => { battery = b; }).catch(() => {});
   }
 
-  // ---------- LANGUAGE FULL NAMES - en-US becomes English ----------
   function getLanguageName() {
     const code = (navigator.language || "en").split("-")[0].toLowerCase();
     const names = {
@@ -459,8 +447,19 @@
     };
   }
 
+  // FIXED: knows now says EVERYTHING in one message
+  function knowsLine(ctx) {
+    const batteryPart = ctx.b !== null
+      ? `Your battery is at ${ctx.b}%. ${ctx.charging ? "You are charging." : "You are NOT charging."}`
+      : `I cannot see your battery, but I can see your screen is the only light in here.`;
+    const darkPart = ctx.darkMode ? "You have dark mode on." : "You don't have dark mode on.";
+    const leftPart = ctx.left > 0 ? `You have tried to leave ${ctx.left} time${ctx.left > 1 ? 's' : ''}.` : `You have not tried to leave yet.`;
+    return `It is ${ctx.t}. You should not be awake. ${batteryPart} You have been here ${ctx.inRoom} and you have tapped ${ctx.taps} times. You are on ${ctx.device} using ${ctx.browser}. Your screen is ${ctx.screen}. ${darkPart} Your phone speaks ${ctx.language}. ${leftPart} I am still here.`;
+  }
+
   function fallback(stage, ctx) {
     if (stage === "final") return LINES.final.map(f => f(ctx)).join(" ");
+    if (stage === "knows") return knowsLine(ctx);
     const pool = LINES[stage];
     return pool[(turns - 1) % pool.length](ctx);
   }
@@ -479,7 +478,7 @@
       ...transcript.slice(-6),
       { role: "user", content: text }
     ];
-    const run = engine.chat.completions.create({ messages, max_tokens: 90, temperature: 0.9 });
+    const run = engine.chat.completions.create({ messages, max_tokens: 120, temperature: 0.9 });
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("slow")), 12000));
     const res = await Promise.race([run, timeout]);
     return res.choices[0].message.content.trim();
@@ -584,21 +583,4 @@
     busy = false;
     locked = false;
     transcript = [];
-    userWords = [];
-    leftCount = 0;
-    wasAway = false;
-    startTime = Date.now();
-    taps = 0;
-    input.disabled = false;
-    input.placeholder = "Say something to the room";
-    sendBtn.disabled = false;
-    after.hidden = true;
-    intro();
-    input.focus();
-  });
-
-  intro();
-  loadVoice();
-</script>
-</body>
-</html>
+    userWords = []
